@@ -101,6 +101,8 @@ async function renderReader(serial, slug) {
 
   const shell=document.querySelector('.reader-shell');
   shell.insertBefore(document.getElementById('reader-stage'),document.querySelector('.reader-toolbar'));
+  const fullscreenButton=document.getElementById('fullscreen');
+  shell.querySelector('.reader-header').append(fullscreenButton);
   let task;
   try { task=pdfjs.getDocument({url}); readerTask=task; activeReaderPdf=await task.promise; }
   catch(err) { if(serial!==routeSerial)return; document.getElementById('reader-status').textContent='PDF gagal dimuat. Periksa URL publik dan izin file pada Supabase Storage.'; throw err; }
@@ -175,17 +177,30 @@ async function renderReader(serial, slug) {
   }
   function fitBook(){
     const fullscreen=shell.classList.contains('is-fullscreen');
-    const availableWidth=fullscreen?shell.clientWidth-16:document.getElementById('reader-stage').clientWidth-24;
-    const availableHeight=fullscreen?shell.clientHeight-16:Math.min(720,window.innerHeight*.8);
+    if(serial!==routeSerial)return;
+    const stage=document.getElementById('reader-stage');
+    const availableWidth=fullscreen?shell.clientWidth:stage.clientWidth-8;
+    const availableHeight=fullscreen?shell.clientHeight:Math.max(280,window.innerHeight-stage.getBoundingClientRect().top-100);
     const ratio=viewport.height/viewport.width;
     const pageWidth=Math.min(availableHeight/ratio,availableWidth/(availableWidth>600?2:1));
     const host=shell.querySelector('.book-host');
-    host.style.maxWidth=Math.max(210,pageWidth*(availableWidth>600?2:1))+'px';
+    const spreadWidth=pageWidth*(availableWidth>600?2:1);
+    host.style.maxWidth=spreadWidth+'px';
+    host.style.width=spreadWidth+'px';
+    host.style.height=pageWidth*ratio+'px';
+    // PageFlip writes a fixed max-width during initialization. Update the actual
+    // layout element too, otherwise settings alone leave fullscreen at 780px.
+    book.style.maxWidth=spreadWidth+'px';
+    book.style.width=spreadWidth+'px';
+    book.style.height=pageWidth*ratio+'px';
+    const wrapper=book.querySelector('.stf__wrapper');
+    if(wrapper){wrapper.style.paddingBottom='0';wrapper.style.height='100%';}
+    book.style.minWidth='0';
     flip.getSettings().maxWidth=Math.max(210,pageWidth);
     flip.getSettings().maxHeight=Math.max(210,pageWidth)*ratio;
     flip.update();centerCover();
   }
-  function leaveFullscreen(){shell.classList.remove('is-fullscreen');document.body.classList.remove('reader-fullscreen');document.getElementById('fullscreen').textContent='Fullscreen';requestAnimationFrame(fitBook);}
+  function leaveFullscreen(){shell.classList.remove('is-fullscreen');document.body.classList.remove('reader-fullscreen');fullscreenButton.textContent='Fullscreen';shell.querySelector('.reader-header').append(fullscreenButton);requestAnimationFrame(fitBook);}
   const onFullscreen=()=>{if(!document.fullscreenElement)leaveFullscreen();};
   const onEscape=e=>{if(e.key==='Escape'&&!document.fullscreenElement)leaveFullscreen();};
   document.addEventListener('fullscreenchange',onFullscreen);
@@ -194,6 +209,7 @@ async function renderReader(serial, slug) {
   document.getElementById('fullscreen').onclick=async()=>{
     if(shell.classList.contains('is-fullscreen')){if(document.fullscreenElement)await document.exitFullscreen();leaveFullscreen();return;}
     shell.classList.add('is-fullscreen');document.body.classList.add('reader-fullscreen');document.getElementById('fullscreen').textContent='Keluar fullscreen';
+    shell.querySelector('.reader-toolbar .toolgroup:last-child').prepend(fullscreenButton);
     try{await shell.requestFullscreen?.();}catch{} requestAnimationFrame(fitBook);
   };
   readerCleanup=()=>{document.removeEventListener('fullscreenchange',onFullscreen);document.removeEventListener('keydown',onEscape);window.removeEventListener('resize',fitBook);document.body.classList.remove('reader-fullscreen');if(document.fullscreenElement===shell)document.exitFullscreen().catch(()=>{});};
