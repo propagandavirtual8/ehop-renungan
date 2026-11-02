@@ -16,6 +16,7 @@ let readerTask = null;
 let routeSerial = 0;
 let activeAdminRows = [];
 let editingId = null;
+let adminBusy = false;
 let activeReaderPdf = null;
 let activeReaderPage = 0;
 
@@ -242,6 +243,7 @@ function renderAdminItems(rows){
     :'<p class="muted" style="font-size:13px">Belum ada edisi. Gunakan form di sebelah kiri.</p>';
 }
 function clearAdminForm(){
+  if(adminBusy)return;
   editingId=null;document.getElementById('edition-form').reset();
   document.getElementById('month').value=new Date().getMonth()+1;
   document.getElementById('year').value=new Date().getFullYear();
@@ -252,6 +254,7 @@ function clearAdminForm(){
   document.getElementById('admin-message').classList.add('hidden');
 }
 function editEdition(row){
+  if(adminBusy)return;
   editingId=row.id;
   document.getElementById('month').value=row.edition_month;
   document.getElementById('year').value=row.edition_year;
@@ -268,15 +271,17 @@ function editEdition(row){
 }
 async function pdfCoverBlob(fileOrUrl){
   const source=typeof fileOrUrl==='string'?{url:fileOrUrl}:{data:await fileOrUrl.arrayBuffer()};
-  const task=pdfjs.getDocument(source);const pdf=await task.promise;
+  const task=pdfjs.getDocument(source);
   try {
+    const pdf=await task.promise;
     const first=await pdf.getPage(1);const base=first.getViewport({scale:1});
     const vp=first.getViewport({scale:640/base.width});
     const canvas=document.createElement('canvas');canvas.width=Math.round(vp.width);canvas.height=Math.round(vp.height);
     await first.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.85));
+    if(!blob)throw new Error('Sampul PDF tidak dapat dibuat. Coba pilih sampul JPG, PNG, atau WEBP.');
     return {blob,count:pdf.numPages};
-  } finally { await pdf.destroy(); }
+  } finally { await task.destroy(); }
 }
 async function uploadAsset(path, file, contentType){
   // Supabase recommends resumable TUS transfers for files above 6 MB.
@@ -292,6 +297,9 @@ async function uploadAsset(path, file, contentType){
         retryDelays:[0,3000,5000,10000,20000],
         headers:{authorization:`Bearer ${session.access_token}`,'x-upsert':'false'},
         uploadDataDuringCreation:true,removeFingerprintOnSuccess:true,
+        // The default TUS fingerprint identifies a file, but not its destination.
+        // A different edition/path must never resume an upload for an older object.
+        fingerprint:async()=>JSON.stringify(['renungan-v1',CONFIG.supabaseUrl,BUCKET,session.user.id,path,file.name||'',file.size,file.lastModified||0,contentType]),
         metadata:{bucketName:BUCKET,objectName:path,contentType,cacheControl:'3600'},
         chunkSize:6*1024*1024,
         onProgress:(uploaded,total)=>setMessage(`Mengunggah PDF... ${Math.round(uploaded/total*100)}%`),
@@ -308,22 +316,39 @@ async function uploadAsset(path, file, contentType){
   if(error)throw error;return path;
 }
 async function saveEdition(e){
-  e.preventDefault();const save=document.getElementById('save'),month=Number(document.getElementById('month').value),year=Number(document.getElementById('year').value);
+  e.preventDefault();
+  if(adminBusy)return;
+  const form=e.currentTarget,serial=routeSerial;
+  const month=Number(document.getElementById('month').value),year=Number(document.getElementById('year').value);
+  // Capture all input before awaiting; navigation or edits cannot change this save.
+  const title=document.getElementById('title').value.trim(),theme=document.getElementById('theme').value.trim();
+  const isPublished=document.getElementById('publish').checked;
   const pdfFile=document.getElementById('pdf-file').files[0],coverFile=document.getElementById('cover-file').files[0];
   const old=editingId?activeAdminRows.find(r=>r.id===editingId):null;
   let pdfPath=document.getElementById('pdf-path').value.trim(),coverPath=old?.cover_path||null,pageCount=old?.page_count||null;
-  const newPaths=[];save.disabled=true;save.textContent='Menyimpan...';
+  const newPaths=[];
+  let committed=false;
+  const controls=[...form.elements,...document.querySelectorAll('#admin-list button, #logout')];
+  adminBusy=true;controls.forEach(el=>el.disabled=true);
+  document.getElementById('save').textContent='Menyimpan...';
   try {
-    if(!Number.isInteger(year)||year<2020||year>2200||month<1||month>12)throw new Error('Bulan atau tahun tidak valid.');
+    if(!Number.isInteger(year)||year<2020||year>2200||!Number.isInteger(month)||month<1||month>12)throw new Error('Bulan atau tahun tidak valid.');
+    if(title.length<2||title.length>160)throw new Error('Judul harus berisi 2–160 karakter.');
+    if(activeAdminRows.some(row=>row.id!==old?.id&&row.edition_year===year&&row.edition_month===month))throw new Error('Edisi bulan ini sudah ada. Gunakan tombol Edit pada daftar edisi.');
     if(pdfFile && pdfFile.type!=='application/pdf' && !pdfFile.name.toLowerCase().endsWith('.pdf'))throw new Error('File harus PDF.');
     if(!pdfFile && !pdfPath)throw new Error('Pilih file PDF atau isi path PDF yang sudah ada di Storage.');
-    if(pdfFile && pdfPath && !old) throw new Error('Dua sumber PDF terisi. Untuk file yang sudah ada di Storage, kosongkan kolom Upload PDF baru. Untuk PDF baru, kosongkan kolom path Storage.');
+    if(pdfFile && pdfPath && pdfPath!==old?.pdf_path) throw new Error('Dua sumber PDF terisi. Untuk file yang sudah ada di Storage, kosongkan kolom Upload PDF baru. Untuk PDF baru, kosongkan kolom path Storage.');
+    if(!pdfFile && (pdfPath.startsWith('/')||/[:\\?#]/.test(pdfPath)||pdfPath.split('/').some(part=>!part||part==='.'||part==='..')))throw new Error('Isi path di dalam bucket, misalnya 2026/11/renungan.pdf, bukan URL lengkap.');
     if(coverFile && !['image/jpeg','image/png','image/webp'].includes(coverFile.type))throw new Error('Sampul harus JPG, PNG, atau WEBP.');
     const folder=`${year}/${String(month).padStart(2,'0')}`;
-    let automaticCover=null;
+    // Verify the PDF before uploading anything, including a selected cover.
+    setMessage(pdfFile?'Membaca PDF dan menyiapkan sampul...':'Memeriksa PDF yang sudah ada di Storage...');
+    let inspected;
+    try { inspected=await pdfCoverBlob(pdfFile||publicUrl(pdfPath)); }
+    catch(err){ throw new Error(pdfFile?'PDF tidak dapat dibaca. Pastikan file PDF valid dan tidak dilindungi password.':'PDF pada path Storage tidak dapat dibaca. Periksa nama path dan Public URL.'); }
+    pageCount=inspected.count;
+    const automaticCover=!coverFile&&(pdfFile||pdfPath!==old?.pdf_path||!coverPath)?inspected.blob:null;
     if(pdfFile){
-      setMessage('Membaca PDF dan menyiapkan sampul...');
-      const c=await pdfCoverBlob(pdfFile);automaticCover=c.blob;pageCount=c.count;
       pdfPath=`${folder}/${crypto.randomUUID()}.pdf`;
       setMessage('Mengunggah PDF...');await uploadAsset(pdfPath,pdfFile,'application/pdf');newPaths.push(pdfPath);
     }
@@ -333,36 +358,34 @@ async function saveEdition(e){
       coverPath=`${folder}/cover-${crypto.randomUUID()}.${ext}`;
       setMessage('Mengunggah sampul...');await uploadAsset(coverPath,file,coverFile?.type||'image/jpeg');newPaths.push(coverPath);
     }
-    // Verify that a pre-existing Storage path really points to a readable PDF.
-    if(!pdfFile){
-      setMessage('Memeriksa PDF yang sudah ada di Storage...');
-      let c;
-      try { c=await pdfCoverBlob(publicUrl(pdfPath)); }
-      catch(err){ throw new Error('PDF pada path Storage tidak dapat dibaca. Periksa nama path dan Public URL.'); }
-      pageCount=c.count;
-      if(!coverFile && !coverPath){
-        coverPath=`${folder}/cover-${crypto.randomUUID()}.jpg`;
-        await uploadAsset(coverPath,c.blob,'image/jpeg');newPaths.push(coverPath);
-      }
-    }
-    const payload={slug:slugFor(year,month),title:document.getElementById('title').value.trim(),theme:document.getElementById('theme').value.trim(),edition_year:year,edition_month:month,pdf_path:pdfPath,cover_path:coverPath,page_count:pageCount,is_published:document.getElementById('publish').checked};
-    if(payload.title.length<2)throw new Error('Judul harus diisi.');
+    const payload={slug:slugFor(year,month),title,theme,edition_year:year,edition_month:month,pdf_path:pdfPath,cover_path:coverPath,page_count:pageCount,is_published:isPublished};
     if(payload.is_published && !old?.published_at) payload.published_at=new Date().toISOString();
     if(!payload.is_published) payload.published_at=null;
     setMessage('Menyimpan informasi edisi...');
     const request=old?db.from('renungan_editions').update(payload).eq('id',old.id):db.from('renungan_editions').insert(payload);
-    const {error}=await request;
+    const {error}=await request.select('id').single();
     if(error)throw error;
-    const serial=routeSerial;await renderAdminConsole(serial,(await db.auth.getUser()).data.user?.email||'admin');
+    // After the database commits, a refresh failure must never delete its assets.
+    committed=true;
+    if(serial!==routeSerial)return;
+    await renderAdminConsole(serial,(await db.auth.getUser()).data.user?.email||'admin');
     setMessage('Edisi berhasil disimpan. '+(payload.is_published?'Sudah tampil di beranda.':'Masih berstatus Draft.'));
   }catch(err){
     // Roll back newly uploaded assets when metadata save fails. Existing assets remain unchanged.
-    if(newPaths.length)await db.storage.from(BUCKET).remove(newPaths).catch(()=>{});
-    setMessage(err?.message||'Gagal menyimpan edisi.',true);
-    save.disabled=false;save.textContent=old?'Simpan perubahan':'Simpan edisi';
+    let cleanupFailed=false;
+    if(!committed&&newPaths.length){
+      try { const result=await db.storage.from(BUCKET).remove(newPaths);cleanupFailed=!!result.error; }
+      catch { cleanupFailed=true; }
+    }
+    if(serial===routeSerial)setMessage(committed?'Edisi sudah tersimpan, tetapi daftar belum dapat dimuat ulang. Muat ulang halaman untuk melihatnya.':(err?.message||'Gagal menyimpan edisi.')+(cleanupFailed?' Berkas baru belum dapat dibersihkan dari Storage.':''),true);
+  }finally{
+    adminBusy=false;
+    controls.forEach(el=>el.disabled=false);
+    if(form.isConnected)document.getElementById('save').textContent=old?'Simpan perubahan':'Simpan edisi';
   }
 }
 async function deleteEdition(row){
+  if(adminBusy)return;
   if(!confirm(`Hapus edisi ${labelDate(row)} dari katalog? Tautan edisi tidak akan berfungsi lagi.`))return;
   const {error}=await db.from('renungan_editions').delete().eq('id',row.id);
   if(error){setMessage(error.message,true);return;}
