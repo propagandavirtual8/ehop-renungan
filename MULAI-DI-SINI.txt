@@ -1,0 +1,20 @@
+RENUNGAN HARIAN EL-BETHEL — PAKET WEBSITE FLIPBOOK
+
+Langkah lanjut paling penting:
+
+1. Supabase Storage > renungan-publik > Edit bucket:
+   Izinkan application/pdf, image/jpeg, image/png, image/webp.
+2. Supabase SQL Editor: jalankan isi file supabase/setup.sql.
+3. Supabase Authentication > Users: buat akun editor.
+4. Supabase SQL Editor: tambahkan UID editor ke public.renungan_admins
+   (contoh perintah ada di akhir setup.sql).
+5. Isi Project URL + publishable/anon key di config.js.
+6. Upload folder website ke repositori GitHub.
+7. Vercel > Add New Project > Import repo > Deploy.
+8. Buka /admin > login > buat edisi November 2026 dari PDF yang
+   SUDAH di Storage, isi exact path di kolom PDF path.
+9. Vercel > Domains: tambahkan renungan.ehopindonesia.com;
+   ikuti instruksi target CNAME Vercel untuk DNS.
+
+Panduan lengkap: README.md
+JANGAN MASUKKAN PASSWORD, SERVICE_ROLE ATAU SECRET KEY KE config.js.

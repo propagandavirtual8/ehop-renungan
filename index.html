@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#431c26" />
+  <meta name="description" content="Renungan Harian El-Bethel — membaca firman Tuhan setiap hari, sepanjang tahun." />
+  <title>Renungan Harian El-Bethel</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/config.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="site-wrap">
+    <header class="site-header">
+      <a class="brand" href="/" data-nav="/" aria-label="Beranda Renungan El-Bethel">
+        <span class="brand-mark" aria-hidden="true">✦</span>
+        <span class="brand-copy"><strong>RENUNGAN HARIAN</strong><span>EL-BETHEL</span></span>
+      </a>
+      <nav class="topnav" aria-label="Navigasi utama">
+        <a href="/" data-nav="/">Beranda</a>
+        <a href="/#arsip" data-nav="/#arsip">Arsip Renungan</a>
+        <a class="admin-link" href="/admin" data-nav="/admin">Admin</a>
+      </nav>
+    </header>
+    <main id="app"><div class="loading-shell">Memuat Renungan El-Bethel...</div></main>
+    <footer class="site-footer">
+      <span>© <span id="copyright-year">2026</span> Renungan Harian El-Bethel</span>
+      <span>Terhubung dalam firman, bertumbuh dalam iman.</span>
+    </footer>
+  </div>
+  <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Perbesar halaman PDF">
+    <button class="overlay-close" id="overlay-close" aria-label="Tutup tampilan besar">×</button>
+    <div id="overlay-body" class="overlay-body"></div>
+  </div>
+</body>
+</html>
