@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2?target=es2022';
 import * as pdfjs from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs';
-import * as tus from 'https://esm.sh/tus-js-client@4?target=es2022';
+// tus-js-client is loaded from its prebuilt BROWSER bundle in index.html.
+// The previous esm.sh entry could resolve to the Node build and reject browser File objects.
 
 pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
 
@@ -280,6 +281,8 @@ async function pdfCoverBlob(fileOrUrl){
 async function uploadAsset(path, file, contentType){
   // Supabase recommends resumable TUS transfers for files above 6 MB.
   if(file.size > 6*1024*1024){
+    const tus = window.tus;
+    if(!tus?.Upload) throw new Error('Library upload browser gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.');
     const {data:{session},error:authError}=await db.auth.getSession();
     if(authError || !session?.access_token)throw new Error('Sesi admin berakhir. Login ulang.');
     const ref=new URL(CONFIG.supabaseUrl).hostname.split('.')[0];
@@ -314,6 +317,7 @@ async function saveEdition(e){
     if(!Number.isInteger(year)||year<2020||year>2200||month<1||month>12)throw new Error('Bulan atau tahun tidak valid.');
     if(pdfFile && pdfFile.type!=='application/pdf' && !pdfFile.name.toLowerCase().endsWith('.pdf'))throw new Error('File harus PDF.');
     if(!pdfFile && !pdfPath)throw new Error('Pilih file PDF atau isi path PDF yang sudah ada di Storage.');
+    if(pdfFile && pdfPath && !old) throw new Error('Dua sumber PDF terisi. Untuk file yang sudah ada di Storage, kosongkan kolom Upload PDF baru. Untuk PDF baru, kosongkan kolom path Storage.');
     if(coverFile && !['image/jpeg','image/png','image/webp'].includes(coverFile.type))throw new Error('Sampul harus JPG, PNG, atau WEBP.');
     const folder=`${year}/${String(month).padStart(2,'0')}`;
     let automaticCover=null;
