@@ -19,6 +19,7 @@ let editingId = null;
 let adminBusy = false;
 let activeReaderPdf = null;
 let activeReaderPage = 0;
+let readerCleanup = null;
 
 function safe(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function labelDate(row) { return `${MONTHS[row.edition_month - 1]} ${row.edition_year}`; }
@@ -28,6 +29,7 @@ function hasConfig() { return CONFIG.supabaseUrl?.startsWith('https://') && !CON
 function showError(message) { app.innerHTML = `<div class="container section"><div class="error-box">${safe(message)}</div><p><a class="plain-link" href="/" data-nav="/">← Kembali ke beranda</a></p></div>`; }
 function setMessage(s, isError=false) { const el=document.getElementById('admin-message'); if(el){el.className=isError?'error-box':'notice'; el.textContent=s; el.classList.remove('hidden');} }
 function cancelReader() {
+  readerCleanup?.();readerCleanup=null;
   if (readerTask) { try { readerTask.destroy(); } catch(e) { /* Document already disposed */ } readerTask=null; }
   if (flipInstance) { try { flipInstance.destroy(); } catch(e) { /* Already disposed */ } flipInstance=null; }
   activeReaderPdf=null;
@@ -91,12 +93,14 @@ async function renderReader(serial, slug) {
   if(error) throw error;
   if(!row){showError('Edisi renungan tidak ditemukan atau belum diterbitkan.');return;}
   const url=publicUrl(row.pdf_path);
-  app.innerHTML=`<section class="container">
-    <div class="reader-header"><a class="crumb" href="/" data-nav="/">← Kembali ke perpustakaan</a><h1>${safe(row.title)}</h1><p>${safe(labelDate(row))} · ${safe(row.theme)}</p></div>
-    <div class="reader-toolbar"><div class="toolgroup"><button id="prev" class="btn btn-soft btn-sm">← Sebelumnya</button><button id="next" class="btn btn-soft btn-sm">Berikutnya →</button></div><div class="toolgroup"><span class="page-count">Halaman</span><input class="page-jump" id="page-jump" type="number" min="1" value="1" aria-label="Nomor halaman" /><span id="page-total" class="page-count">/ ...</span><button id="jump" class="btn btn-sm">Pergi</button></div><div class="toolgroup"><button id="zoom" class="btn btn-soft btn-sm">Perbesar</button><button id="share" class="btn btn-soft btn-sm">Bagikan</button><a class="btn btn-soft btn-sm" href="${safe(url)}" target="_blank" rel="noopener noreferrer">PDF asli ↗</a></div></div>
+  app.innerHTML=`<section class="container reader-shell">
+    <div class="reader-header"><h1>${safe(row.theme?.trim() || `Renungan ${labelDate(row)}`)}</h1></div>
+    <div class="reader-toolbar"><div class="toolgroup"><button id="prev" class="btn btn-soft btn-sm">← Sebelumnya</button><button id="next" class="btn btn-soft btn-sm">Berikutnya →</button></div><div class="toolgroup"><span class="page-count">Halaman</span><input class="page-jump" id="page-jump" type="number" min="1" value="1" aria-label="Nomor halaman" /><span id="page-total" class="page-count">/ ...</span><button id="jump" class="btn btn-sm">Pergi</button></div><div class="toolgroup"><button id="fullscreen" class="btn btn-soft btn-sm">Fullscreen</button><button id="zoom" class="btn btn-soft btn-sm">Perbesar</button><button id="share" class="btn btn-soft btn-sm">Bagikan</button><a class="btn btn-soft btn-sm" href="${safe(url)}" target="_blank" rel="noopener noreferrer">PDF asli ↗</a></div></div>
     <div id="reader-stage" class="reader-stage"><div class="book-host"><div id="book"></div></div><div id="reader-loading" class="spinner" style="position:absolute"></div></div>
     <div class="status-line" id="reader-status">Menyiapkan halaman buku...</div></section>`;
 
+  const shell=document.querySelector('.reader-shell');
+  shell.insertBefore(document.getElementById('reader-stage'),document.querySelector('.reader-toolbar'));
   let task;
   try { task=pdfjs.getDocument({url}); readerTask=task; activeReaderPdf=await task.promise; }
   catch(err) { if(serial!==routeSerial)return; document.getElementById('reader-status').textContent='PDF gagal dimuat. Periksa URL publik dan izin file pada Supabase Storage.'; throw err; }
@@ -156,12 +160,46 @@ async function renderReader(serial, slug) {
   }
   function setCurrent(index){
     current=index;activeReaderPage=index;
+    requestAnimationFrame(centerCover);
     const jump=document.getElementById('page-jump');if(jump)jump.value=index+1;
     const u=new URL(location.href);u.searchParams.set('halaman',String(index+1));history.replaceState({},'',u);
     void preloadAround(index);
   }
   flip.on('flip',event=>setCurrent(event.data));
-  flip.on('changeOrientation',()=>void preloadAround(current));
+  function centerCover(){
+    if(serial!==routeSerial)return;
+    const rect=flip.getBoundsRect();
+    const closed=flip.getOrientation()==='landscape';
+    const shift=closed?(current===0?-rect.pageWidth/2:current===pdf.numPages-1&&pdf.numPages%2===0?rect.pageWidth/2:0):0;
+    book.style.transform='translateX('+shift+'px)';
+  }
+  function fitBook(){
+    const fullscreen=shell.classList.contains('is-fullscreen');
+    const availableWidth=fullscreen?shell.clientWidth-16:document.getElementById('reader-stage').clientWidth-24;
+    const availableHeight=fullscreen?shell.clientHeight-16:Math.min(720,window.innerHeight*.8);
+    const ratio=viewport.height/viewport.width;
+    const pageWidth=Math.min(availableHeight/ratio,availableWidth/(availableWidth>600?2:1));
+    const host=shell.querySelector('.book-host');
+    host.style.maxWidth=Math.max(210,pageWidth*(availableWidth>600?2:1))+'px';
+    flip.getSettings().maxWidth=Math.max(210,pageWidth);
+    flip.getSettings().maxHeight=Math.max(210,pageWidth)*ratio;
+    flip.update();centerCover();
+  }
+  function leaveFullscreen(){shell.classList.remove('is-fullscreen');document.body.classList.remove('reader-fullscreen');document.getElementById('fullscreen').textContent='Fullscreen';requestAnimationFrame(fitBook);}
+  const onFullscreen=()=>{if(!document.fullscreenElement)leaveFullscreen();};
+  const onEscape=e=>{if(e.key==='Escape'&&!document.fullscreenElement)leaveFullscreen();};
+  document.addEventListener('fullscreenchange',onFullscreen);
+  document.addEventListener('keydown',onEscape);
+  window.addEventListener('resize',fitBook);
+  document.getElementById('fullscreen').onclick=async()=>{
+    if(shell.classList.contains('is-fullscreen')){if(document.fullscreenElement)await document.exitFullscreen();leaveFullscreen();return;}
+    shell.classList.add('is-fullscreen');document.body.classList.add('reader-fullscreen');document.getElementById('fullscreen').textContent='Keluar fullscreen';
+    try{await shell.requestFullscreen?.();}catch{} requestAnimationFrame(fitBook);
+  };
+  readerCleanup=()=>{document.removeEventListener('fullscreenchange',onFullscreen);document.removeEventListener('keydown',onEscape);window.removeEventListener('resize',fitBook);document.body.classList.remove('reader-fullscreen');if(document.fullscreenElement===shell)document.exitFullscreen().catch(()=>{});};
+  flip.on('changeState',event=>{if(event.data==='flipping')book.style.transform='translateX(0)';else if(event.data==='read')centerCover();});
+  flip.on('changeOrientation',()=>{centerCover();void preloadAround(current);});
+  fitBook();
   document.getElementById('prev').onclick=()=>flip.flipPrev();
   document.getElementById('next').onclick=()=>flip.flipNext();
   document.getElementById('jump').onclick=()=>{
