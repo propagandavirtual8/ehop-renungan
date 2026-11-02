@@ -6,3 +6,16 @@
 /* Let the page reach the viewport boundary without the initial book-size cap. */
 .reader-header{display:flex;align-items:center;justify-content:space-between;gap:16px;text-align:left}.reader-header h1{min-width:0}.reader-header #fullscreen{flex-shrink:0}.reader-shell{max-width:none;width:100%;padding:0 16px}.reader-stage{padding:4px}.book-host{transition:none}.is-fullscreen .reader-stage{padding:0}.is-fullscreen .book-host{max-width:none}.reader-shell.is-fullscreen{height:100dvh}
 @media(max-width:600px){.reader-shell{padding:0 4px}.reader-header{padding:12px 8px;gap:8px}.reader-header h1{font-size:20px}.reader-header #fullscreen{font-size:11px;padding:9px}.reader-stage{padding:0}}
+/* Match the reader heading to the header's content edges. */
+.reader-header{width:min(1180px,calc(100vw - 44px));margin-inline:auto}.menu-toggle{display:none}
+@media(min-width:601px) and (max-width:800px){.reader-header{width:calc(100vw - 36px)}}
+@media(max-width:600px){
+ .site-header{flex-wrap:nowrap;align-items:center;gap:12px}
+ .menu-toggle{display:grid;place-items:center;flex:none;width:44px;height:44px;border:1px solid #e0d5d3;border-radius:10px;background:#fffdf9;color:#542531;font-size:25px;line-height:1}
+ .menu-toggle:focus-visible{outline:2px solid #8d4556;outline-offset:3px}
+ .site-header .topnav{display:none;position:absolute;top:calc(100% + 6px);right:14px;width:min(290px,calc(100vw - 28px));padding:10px;flex-direction:column;align-items:stretch;gap:4px;background:#fffdf9;border:1px solid #e9ddd0;border-radius:14px;box-shadow:0 12px 30px #431d2926;z-index:10}
+ .site-header.menu-open .topnav{display:flex}
+ .site-header .topnav a{display:block;font-size:13px;padding:13px 12px;border-radius:8px}
+ .site-header .topnav a:hover{background:#f6ebe4}
+ .reader-header{width:calc(100vw - 28px);padding:12px 0}
+}

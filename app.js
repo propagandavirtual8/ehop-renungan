@@ -21,6 +21,19 @@ let activeReaderPdf = null;
 let activeReaderPage = 0;
 let readerCleanup = null;
 
+const menuToggle=document.getElementById('menu-toggle');
+const siteHeader=document.querySelector('.site-header');
+function setMenu(open){
+  siteHeader.classList.toggle('menu-open',open);
+  menuToggle.setAttribute('aria-expanded',String(open));
+  menuToggle.setAttribute('aria-label',open?'Tutup menu':'Buka menu');
+  menuToggle.firstElementChild.textContent=open?'×':'☰';
+}
+menuToggle.onclick=()=>setMenu(menuToggle.getAttribute('aria-expanded')!=='true');
+document.addEventListener('click',e=>{if(!siteHeader.contains(e.target)||e.target.closest('.topnav a,.brand'))setMenu(false);});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&menuToggle.getAttribute('aria-expanded')==='true'){setMenu(false);menuToggle.focus();}});
+window.matchMedia('(max-width:600px)').addEventListener('change',()=>setMenu(false));
+
 function safe(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function labelDate(row) { return `${MONTHS[row.edition_month - 1]} ${row.edition_year}`; }
 function slugFor(year, month) { return `${MONTHS[Number(month) - 1].toLowerCase()}-${year}`; }
