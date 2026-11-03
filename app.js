@@ -197,7 +197,7 @@ async function renderReader(serial, slug) {
     if(serial!==routeSerial)return;
     const stage=document.getElementById('reader-stage');
     const availableWidth=fullscreen?shell.clientWidth:stage.clientWidth-8;
-    const availableHeight=fullscreen?shell.clientHeight:Math.max(280,window.innerHeight-stage.getBoundingClientRect().top-100);
+    const availableHeight=fullscreen?Math.max(80,shell.clientHeight-shell.querySelector('.reader-toolbar').offsetHeight-8):Math.max(280,window.innerHeight-stage.getBoundingClientRect().top-100);
     const ratio=viewport.height/viewport.width;
     const pageWidth=Math.min(availableHeight/ratio,availableWidth/(availableWidth>600?2:1));
     const host=shell.querySelector('.book-host');
@@ -213,8 +213,11 @@ async function renderReader(serial, slug) {
     const wrapper=book.querySelector('.stf__wrapper');
     if(wrapper){wrapper.style.paddingBottom='0';wrapper.style.height='100%';}
     book.style.minWidth='0';
-    flip.getSettings().maxWidth=Math.max(210,pageWidth);
-    flip.getSettings().maxHeight=Math.max(210,pageWidth)*ratio;
+    book.style.minHeight='0';
+    flip.getSettings().minWidth=pageWidth*.6;
+    flip.getSettings().minHeight=pageWidth*ratio*.6;
+    flip.getSettings().maxWidth=pageWidth;
+    flip.getSettings().maxHeight=pageWidth*ratio;
     flip.update();centerCover();
   }
   function leaveFullscreen(){shell.classList.remove('is-fullscreen');document.body.classList.remove('reader-fullscreen');fullscreenButton.textContent='Fullscreen';shell.querySelector('.reader-header').append(fullscreenButton);shell.querySelector('#device-fullscreen')?.remove();const url=new URL(location.href);url.searchParams.set('layar','normal');history.replaceState({},'',url);requestAnimationFrame(fitBook);}
@@ -223,13 +226,15 @@ async function renderReader(serial, slug) {
   document.addEventListener('fullscreenchange',onFullscreen);
   document.addEventListener('keydown',onEscape);
   window.addEventListener('resize',fitBook);
+  const toolbarObserver=new ResizeObserver(()=>requestAnimationFrame(()=>{if(serial===routeSerial)fitBook();}));
+  toolbarObserver.observe(shell.querySelector('.reader-toolbar'));
   document.getElementById('fullscreen').onclick=async()=>{
     if(shell.classList.contains('is-fullscreen')){if(document.fullscreenElement)await document.exitFullscreen();leaveFullscreen();return;}
     shell.classList.add('is-fullscreen');document.body.classList.add('reader-fullscreen');document.getElementById('fullscreen').textContent='Keluar fullscreen';
     shell.querySelector('.reader-toolbar .toolgroup:last-child').prepend(fullscreenButton);
-    try{await shell.requestFullscreen?.();}catch{} requestAnimationFrame(fitBook);
+    try{await shell.requestFullscreen?.({navigationUI:'hide'});}catch{} requestAnimationFrame(fitBook);
   };
-  readerCleanup=()=>{document.removeEventListener('fullscreenchange',onFullscreen);document.removeEventListener('keydown',onEscape);window.removeEventListener('resize',fitBook);document.body.classList.remove('reader-fullscreen');if(document.fullscreenElement===shell)document.exitFullscreen().catch(()=>{});};
+  readerCleanup=()=>{toolbarObserver.disconnect();document.removeEventListener('fullscreenchange',onFullscreen);document.removeEventListener('keydown',onEscape);window.removeEventListener('resize',fitBook);document.body.classList.remove('reader-fullscreen');if(document.fullscreenElement===shell)document.exitFullscreen().catch(()=>{});};
   flip.on('changeState',event=>{if(event.data==='flipping')book.style.transform='translateX(0)';else if(event.data==='read')centerCover();});
   flip.on('changeOrientation',()=>{centerCover();void preloadAround(current);});
   fitBook();
@@ -241,7 +246,7 @@ async function renderReader(serial, slug) {
     group.prepend(fullscreenButton);
     if(shell.requestFullscreen&&document.fullscreenEnabled){
       const deviceButton=document.createElement('button');
-      deviceButton.id='device-fullscreen';deviceButton.className='btn btn-soft btn-sm';deviceButton.textContent='Fullscreen perangkat';
+      deviceButton.id='device-fullscreen';deviceButton.className='btn btn-sm device-primary';deviceButton.textContent='Layar penuh perangkat';
       deviceButton.onclick=async()=>{try{await shell.requestFullscreen({navigationUI:'hide'});deviceButton.remove();requestAnimationFrame(fitBook);}catch{deviceButton.textContent='Fullscreen tidak tersedia';}};
       group.prepend(deviceButton);
     }

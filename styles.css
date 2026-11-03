@@ -22,3 +22,9 @@
 .reader-shell:not(.is-fullscreen) .reader-stage{width:min(1180px,calc(100vw - 44px));margin-inline:auto}
 @media(min-width:601px) and (max-width:800px){.reader-shell:not(.is-fullscreen) .reader-stage{width:calc(100vw - 36px)}}
 @media(max-width:600px){.reader-shell:not(.is-fullscreen) .reader-stage{width:calc(100vw - 28px)}}
+/* Reserve a separate bottom row for controls; never overlay PDF content. */
+.reader-shell.is-fullscreen{display:grid;grid-template-rows:minmax(0,1fr) auto;overflow:hidden}
+.is-fullscreen .reader-stage{height:auto;min-height:0;width:100%;grid-row:1}
+.is-fullscreen .reader-toolbar{position:static;grid-row:2;transform:none;left:auto;bottom:auto;width:100%;max-width:none;margin:0;opacity:1;border-radius:0;box-sizing:border-box;padding:8px 12px calc(8px + env(safe-area-inset-bottom));background:#fffdf9;border-top:1px solid #e0d5d3;gap:8px}
+.is-fullscreen .reader-toolbar .device-primary{background:#542531;color:white;border-color:#542531}
+@media(max-width:600px){.is-fullscreen .reader-toolbar{gap:6px;padding:6px 6px calc(6px + env(safe-area-inset-bottom))}.is-fullscreen .reader-toolbar .btn{min-height:36px}.is-fullscreen .toolgroup{gap:5px}}
