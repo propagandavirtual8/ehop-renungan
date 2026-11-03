@@ -21,6 +21,13 @@ let activeReaderPdf = null;
 let activeReaderPage = 0;
 let readerCleanup = null;
 
+function controlIcon(element,name,label){
+  const paths={prev:'M15 5l-7 7 7 7',next:'M9 5l7 7-7 7',jump:'M5 12h14m-6-6 6 6-6 6',expand:'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5',close:'M6 6l12 12M6 18 18 6',zoom:'M21 21l-5-5M11 7v8M7 11h8',share:'M12 16V3m-5 5 5-5 5 5M5 13v8h14v-8',pdf:'M14 2H5v20h14V7zM14 2v6h5M8 13h8M8 17h6'};
+  element.classList.add('icon-control');
+  element.setAttribute('aria-label',label);element.title=label;
+  element.innerHTML=`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]}"/>${name==='zoom'?'<circle cx="11" cy="11" r="7"/>':''}</svg>`;
+}
+
 const menuToggle=document.getElementById('menu-toggle');
 const siteHeader=document.querySelector('.site-header');
 function setMenu(open){
@@ -116,6 +123,8 @@ async function renderReader(serial, slug) {
   const shell=document.querySelector('.reader-shell');
   shell.insertBefore(document.getElementById('reader-stage'),document.querySelector('.reader-toolbar'));
   const fullscreenButton=document.getElementById('fullscreen');
+  for(const [id,icon,label] of [['prev','prev','Halaman sebelumnya'],['next','next','Halaman berikutnya'],['jump','jump','Buka nomor halaman'],['zoom','zoom','Perbesar halaman'],['share','share','Bagikan halaman'],['fullscreen','expand','Fullscreen']])controlIcon(document.getElementById(id),icon,label);
+  controlIcon(shell.querySelector('.reader-toolbar a'),'pdf','Buka PDF asli');
   shell.querySelector('.reader-header').append(fullscreenButton);
   const sharedParams=new URLSearchParams(location.search);
   const openReading=sharedParams.get('layar')==='penuh'||(sharedParams.has('halaman')&&sharedParams.get('layar')!=='normal');
@@ -220,7 +229,7 @@ async function renderReader(serial, slug) {
     flip.getSettings().maxHeight=pageWidth*ratio;
     flip.update();centerCover();
   }
-  function leaveFullscreen(){shell.classList.remove('is-fullscreen');document.body.classList.remove('reader-fullscreen');fullscreenButton.textContent='Fullscreen';shell.querySelector('.reader-header').append(fullscreenButton);shell.querySelector('#device-fullscreen')?.remove();const url=new URL(location.href);url.searchParams.set('layar','normal');history.replaceState({},'',url);requestAnimationFrame(fitBook);}
+  function leaveFullscreen(){shell.classList.remove('is-fullscreen');document.body.classList.remove('reader-fullscreen');controlIcon(fullscreenButton,'expand','Fullscreen');shell.querySelector('.reader-header').append(fullscreenButton);shell.querySelector('#device-fullscreen')?.remove();const url=new URL(location.href);url.searchParams.set('layar','normal');history.replaceState({},'',url);requestAnimationFrame(fitBook);}
   const onFullscreen=()=>{if(!document.fullscreenElement)leaveFullscreen();};
   const onEscape=e=>{if(e.key==='Escape'&&!document.fullscreenElement)leaveFullscreen();};
   document.addEventListener('fullscreenchange',onFullscreen);
@@ -230,7 +239,7 @@ async function renderReader(serial, slug) {
   toolbarObserver.observe(shell.querySelector('.reader-toolbar'));
   document.getElementById('fullscreen').onclick=async()=>{
     if(shell.classList.contains('is-fullscreen')){if(document.fullscreenElement)await document.exitFullscreen();leaveFullscreen();return;}
-    shell.classList.add('is-fullscreen');document.body.classList.add('reader-fullscreen');document.getElementById('fullscreen').textContent='Keluar fullscreen';
+    shell.classList.add('is-fullscreen');document.body.classList.add('reader-fullscreen');controlIcon(fullscreenButton,'close','Keluar fullscreen');
     shell.querySelector('.reader-toolbar .toolgroup:last-child').prepend(fullscreenButton);
     try{await shell.requestFullscreen?.({navigationUI:'hide'});}catch{} requestAnimationFrame(fitBook);
   };
@@ -241,13 +250,13 @@ async function renderReader(serial, slug) {
   // The requested page also drives zoom and re-sharing before any page turn.
   flip.turnToPage(starting);setCurrent(starting);
   if(openReading){
-    fullscreenButton.textContent='Keluar tampilan penuh';
+    controlIcon(fullscreenButton,'close','Keluar tampilan penuh');
     const group=shell.querySelector('.reader-toolbar .toolgroup:last-child');
     group.prepend(fullscreenButton);
     if(shell.requestFullscreen&&document.fullscreenEnabled){
       const deviceButton=document.createElement('button');
-      deviceButton.id='device-fullscreen';deviceButton.className='btn btn-sm device-primary';deviceButton.textContent='Layar penuh perangkat';
-      deviceButton.onclick=async()=>{try{await shell.requestFullscreen({navigationUI:'hide'});deviceButton.remove();requestAnimationFrame(fitBook);}catch{deviceButton.textContent='Fullscreen tidak tersedia';}};
+      deviceButton.id='device-fullscreen';deviceButton.className='btn btn-sm device-primary';controlIcon(deviceButton,'expand','Layar penuh perangkat');
+      deviceButton.onclick=async()=>{try{await shell.requestFullscreen({navigationUI:'hide'});deviceButton.remove();requestAnimationFrame(fitBook);}catch{deviceButton.setAttribute('aria-label','Fullscreen tidak tersedia');deviceButton.title='Fullscreen tidak tersedia';}};
       group.prepend(deviceButton);
     }
     requestAnimationFrame(fitBook);
@@ -259,6 +268,7 @@ async function renderReader(serial, slug) {
     if(Number.isInteger(n) && n>=1 && n<=pdf.numPages) {flip.turnToPage(n-1);setCurrent(n-1);}
   };
   document.getElementById('page-jump').onkeydown=e=>{if(e.key==='Enter')document.getElementById('jump').click();};
+  document.getElementById('page-jump').onchange=()=>document.getElementById('jump').click();
   document.getElementById('share').onclick=async()=>{
     const shareUrl=new URL(location.href);
     shareUrl.searchParams.set('halaman',String(activeReaderPage+1));
