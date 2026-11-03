@@ -2,6 +2,6 @@
   "name": "ehop-renungan",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test tests/admin.test.cjs", "test:live": "node tests/live-read.cjs" },
+  "scripts": { "test": "node --test tests/admin.test.cjs tests/share-metadata.test.mjs", "test:live": "node tests/live-read.cjs" },
   "devDependencies": { "playwright": "1.62.1", "pdf-lib": "1.17.1" }
 }

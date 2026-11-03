@@ -1,3 +1,4 @@
+import { shareMetadata } from './share-metadata.js';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2?target=es2022';
 import * as pdfjs from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs';
 // tus-js-client is loaded from its prebuilt BROWSER bundle in index.html.
@@ -274,7 +275,7 @@ async function renderReader(serial, slug) {
     shareUrl.searchParams.set('halaman',String(activeReaderPage+1));
     shareUrl.searchParams.set('layar','penuh');
     const link=shareUrl.href;
-    try { if(navigator.share) await navigator.share({title:row.title,url:link}); else {await navigator.clipboard.writeText(link);status.textContent='Tautan halaman berhasil disalin.';} }
+    try { if(navigator.share) await navigator.share({title:shareMetadata(row,activeReaderPage+1).title,url:link}); else {await navigator.clipboard.writeText(link);status.textContent='Tautan halaman berhasil disalin.';} }
     catch(e){if(e.name!=='AbortError') status.textContent='Silakan salin alamat dari browser untuk membagikannya.';}
   };
   document.getElementById('zoom').onclick=async()=>{
