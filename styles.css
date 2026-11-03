@@ -19,3 +19,6 @@
  .site-header .topnav a:hover{background:#f6ebe4}
  .reader-header{width:calc(100vw - 28px);padding:12px 0}
 }
+.reader-shell:not(.is-fullscreen) .reader-stage{width:min(1180px,calc(100vw - 44px));margin-inline:auto}
+@media(min-width:601px) and (max-width:800px){.reader-shell:not(.is-fullscreen) .reader-stage{width:calc(100vw - 36px)}}
+@media(max-width:600px){.reader-shell:not(.is-fullscreen) .reader-stage{width:calc(100vw - 28px)}}
