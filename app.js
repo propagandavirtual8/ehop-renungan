@@ -39,9 +39,10 @@ function labelDate(row) { return `${MONTHS[row.edition_month - 1]} ${row.edition
 function slugFor(year, month) { return `${MONTHS[Number(month) - 1].toLowerCase()}-${year}`; }
 function publicUrl(path) { return path ? db.storage.from(BUCKET).getPublicUrl(path).data.publicUrl : ''; }
 function hasConfig() { return CONFIG.supabaseUrl?.startsWith('https://') && !CONFIG.supabaseUrl.includes('GANTI-') && CONFIG.publishableKey && !CONFIG.publishableKey.includes('GANTI-'); }
-function showError(message) { app.innerHTML = `<div class="container section"><div class="error-box">${safe(message)}</div><p><a class="plain-link" href="/" data-nav="/">← Kembali ke beranda</a></p></div>`; }
+function showError(message) { document.body.classList.remove('reader-fullscreen'); app.innerHTML = `<div class="container section"><div class="error-box">${safe(message)}</div><p><a class="plain-link" href="/" data-nav="/">← Kembali ke beranda</a></p></div>`; }
 function setMessage(s, isError=false) { const el=document.getElementById('admin-message'); if(el){el.className=isError?'error-box':'notice'; el.textContent=s; el.classList.remove('hidden');} }
 function cancelReader() {
+  document.body.classList.remove('reader-fullscreen');
   readerCleanup?.();readerCleanup=null;
   if (readerTask) { try { readerTask.destroy(); } catch(e) { /* Document already disposed */ } readerTask=null; }
   if (flipInstance) { try { flipInstance.destroy(); } catch(e) { /* Already disposed */ } flipInstance=null; }
@@ -116,6 +117,9 @@ async function renderReader(serial, slug) {
   shell.insertBefore(document.getElementById('reader-stage'),document.querySelector('.reader-toolbar'));
   const fullscreenButton=document.getElementById('fullscreen');
   shell.querySelector('.reader-header').append(fullscreenButton);
+  const sharedParams=new URLSearchParams(location.search);
+  const openReading=sharedParams.get('layar')==='penuh'||(sharedParams.has('halaman')&&sharedParams.get('layar')!=='normal');
+  if(openReading){shell.classList.add('is-fullscreen');document.body.classList.add('reader-fullscreen');}
   let task;
   try { task=pdfjs.getDocument({url}); readerTask=task; activeReaderPdf=await task.promise; }
   catch(err) { if(serial!==routeSerial)return; document.getElementById('reader-status').textContent='PDF gagal dimuat. Periksa URL publik dan izin file pada Supabase Storage.'; throw err; }
@@ -213,7 +217,7 @@ async function renderReader(serial, slug) {
     flip.getSettings().maxHeight=Math.max(210,pageWidth)*ratio;
     flip.update();centerCover();
   }
-  function leaveFullscreen(){shell.classList.remove('is-fullscreen');document.body.classList.remove('reader-fullscreen');fullscreenButton.textContent='Fullscreen';shell.querySelector('.reader-header').append(fullscreenButton);requestAnimationFrame(fitBook);}
+  function leaveFullscreen(){shell.classList.remove('is-fullscreen');document.body.classList.remove('reader-fullscreen');fullscreenButton.textContent='Fullscreen';shell.querySelector('.reader-header').append(fullscreenButton);shell.querySelector('#device-fullscreen')?.remove();const url=new URL(location.href);url.searchParams.set('layar','normal');history.replaceState({},'',url);requestAnimationFrame(fitBook);}
   const onFullscreen=()=>{if(!document.fullscreenElement)leaveFullscreen();};
   const onEscape=e=>{if(e.key==='Escape'&&!document.fullscreenElement)leaveFullscreen();};
   document.addEventListener('fullscreenchange',onFullscreen);
@@ -229,6 +233,20 @@ async function renderReader(serial, slug) {
   flip.on('changeState',event=>{if(event.data==='flipping')book.style.transform='translateX(0)';else if(event.data==='read')centerCover();});
   flip.on('changeOrientation',()=>{centerCover();void preloadAround(current);});
   fitBook();
+  // The requested page also drives zoom and re-sharing before any page turn.
+  flip.turnToPage(starting);setCurrent(starting);
+  if(openReading){
+    fullscreenButton.textContent='Keluar tampilan penuh';
+    const group=shell.querySelector('.reader-toolbar .toolgroup:last-child');
+    group.prepend(fullscreenButton);
+    if(shell.requestFullscreen&&document.fullscreenEnabled){
+      const deviceButton=document.createElement('button');
+      deviceButton.id='device-fullscreen';deviceButton.className='btn btn-soft btn-sm';deviceButton.textContent='Fullscreen perangkat';
+      deviceButton.onclick=async()=>{try{await shell.requestFullscreen({navigationUI:'hide'});deviceButton.remove();requestAnimationFrame(fitBook);}catch{deviceButton.textContent='Fullscreen tidak tersedia';}};
+      group.prepend(deviceButton);
+    }
+    requestAnimationFrame(fitBook);
+  }
   document.getElementById('prev').onclick=()=>flip.flipPrev();
   document.getElementById('next').onclick=()=>flip.flipNext();
   document.getElementById('jump').onclick=()=>{
@@ -237,7 +255,10 @@ async function renderReader(serial, slug) {
   };
   document.getElementById('page-jump').onkeydown=e=>{if(e.key==='Enter')document.getElementById('jump').click();};
   document.getElementById('share').onclick=async()=>{
-    const link=location.href;
+    const shareUrl=new URL(location.href);
+    shareUrl.searchParams.set('halaman',String(activeReaderPage+1));
+    shareUrl.searchParams.set('layar','penuh');
+    const link=shareUrl.href;
     try { if(navigator.share) await navigator.share({title:row.title,url:link}); else {await navigator.clipboard.writeText(link);status.textContent='Tautan halaman berhasil disalin.';} }
     catch(e){if(e.name!=='AbortError') status.textContent='Silakan salin alamat dari browser untuk membagikannya.';}
   };
